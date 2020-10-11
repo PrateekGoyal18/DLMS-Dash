@@ -22,7 +22,7 @@ authenticated = False
 @app.route('/', methods=["GET", "POST"])
 def login():
     if request.method == "GET":
-        session.clear()
+        # session.clear()
         return render_template('login.html')
     
     elif request.method == 'POST':
