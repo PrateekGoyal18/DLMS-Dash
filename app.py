@@ -5,6 +5,8 @@ import pyrebase
 import string, random
 import requests
 from datetime import datetime
+import pandas as pd
+import os
 
 app = Flask(__name__)
 
@@ -22,15 +24,14 @@ authenticated = False
 @app.route('/', methods=["GET", "POST"])
 def login():
     if request.method == "GET":
-        # session.clear()
+        session.clear()
         return render_template('login.html')
     
     elif request.method == 'POST':
         if request.form['auth'] == 'SignIn':
             try:
                 login = user_login(auth, request.form['email'], request.form['password'])
-                authenticated = True
-                session["authenticated"] = authenticated
+                session["authenticated"] = True
                 return redirect('/home')
             except requests.exceptions.HTTPError as e:
                 return render_template('login.html', message='Wrong Email ID/Password.')
@@ -54,7 +55,7 @@ def meter():
         if session.get("authenticated", None):
             return render_template('home.html')
         else:
-            return('<h1>User not logged in</h1>')
+            return('<h2>User not logged in</h2>')
     
     elif request.method == 'POST':
         session["meterVal"] = request.form['meterSelect']
@@ -73,21 +74,19 @@ def date():
                 meterConfig = meter2Config
             meter = pyrebase.initialize_app(meterConfig)
             db = meter.database()
-            
             dates = list(db.child("/Timestamp Data").shallow().get().val())
             dates.sort(key=lambda date:datetime.strptime(date, '%d-%m-%Y'))
-
             static = db.child("/Static Information").get().val()
             name, sno, year = static['Manufacturer Name'], static['Serial No'], static['Manufacture Year']
             meterInfo = [name, sno, year]
             return render_template('date.html', meterInfo=meterInfo, dates=dates)
         else:
-            return('<h1>User not logged in</h1>')
+            return('<h2>User not logged in</h2>')
 
     elif request.method == 'POST':
         if request.form['datePage'] == 'dateValue':
-            date = request.form['date']
-            session["date"] = date
+            dateVal = request.form['date']
+            session["dateVal"] = dateVal
             return redirect('/charts')
         elif request.form['datePage'] == 'liveData':
             return redirect('/live')
@@ -97,28 +96,66 @@ def date():
 @app.route('/live', methods=["GET", "POST"])
 def live():
     if request.method == 'GET':
-        meterVal = session.get("meterVal", None)
-        if meterVal == 'M1':
-            meterConfig = meter1Config
-        elif meterVal == 'M2':
-            meterConfig = meter2Config
-        dbURL = meterConfig['databaseURL'] + '/Real Time Data.json'
-        return render_template('live.html', dbURL=dbURL)
+        if session.get("authenticated", None):
+            meterVal = session.get("meterVal", None)
+            if meterVal == 'M1':
+                meterConfig = meter1Config
+            elif meterVal == 'M2':
+                meterConfig = meter2Config
+            dbURL = meterConfig['databaseURL'] + '/Real Time Data.json'
+            return render_template('live.html', dbURL=dbURL)
+        else:
+            return('<h2>User not logged in</h2>')
 
 
 # Charts Page
 @app.route('/charts', methods=["GET", "POST"])
 def chart():
     if request.method == 'GET':
-        return render_template('charts.html')
+        if session.get("authenticated", None):
+            meterVal = session.get("meterVal", None)
+            dateVal = session.get("dateVal", None)
+            if meterVal == 'M1':
+                meterConfig = meter1Config
+            elif meterVal == 'M2':
+                meterConfig = meter2Config
+            meter = pyrebase.initialize_app(meterConfig)
+            db = meter.database()
+            times = list(db.child("/Timestamp Data/"+dateVal).shallow().get().val())
+            data = db.child('Timestamp Data/'+dateVal).get()
+            df = pd.DataFrame(data.val())
+            df.loc['Power'].to_json('power.json')
+            dfPower = pd.read_json('power.json')
+            df.loc['Energy'].to_json('energy.json')
+            dfEnergy = pd.read_json('energy.json')
+            os.remove('power.json')
+            os.remove('energy.json')
+            df.drop(['Power', 'Energy'], axis = 0, inplace = True)
+            df = df.append([dfPower, dfEnergy]).T
+            df.reset_index(level=0, inplace=True)
+            df.rename(columns={"index": "Time"}, inplace=True)
+            paramValues = {}
+            for param in df.columns:
+                paramValues[param] = df[param].tolist()
+            df.to_csv('data.csv', index=False)
+            return render_template('charts.html', paramValues=paramValues)
+        else:
+            return('<h2>User not logged in</h2>')
 
     elif request.method == 'POST':
         if request.form['submit'] == 'DataDownload':
             meterVal = session.get("meterVal", None)
-            date = session.get("date", None)
-            filename = str(meterVal[0]) + 'eter' + str(meterVal[1]) + '(' + str(date) + ').csv'
+            dateVal = session.get("dateVal", None)
+            filename = 'Meter' + str(meterVal[1]) + '(' + str(dateVal) + ').csv'
             return send_file('data.csv', attachment_filename=filename, as_attachment=True)
 
+
+# Logout Page
+@app.route("/logout")
+def logout():
+    session.clear()
+    session["authenticated"] = False
+    return render_template('logout.html')
 
 if __name__ == '__main__':
     app.run(host='127.0.0.1', debug=True)

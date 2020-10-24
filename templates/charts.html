@@ -1,10 +1,94 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<form method="POST" class="hidden" id="form" style="position: fixed; left: 0px; top: 30px;">
-    <div class="form-group">
-        &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
-        <button class="btn btn-secondary" type="submit" name="submit" value="DataDownload" id="submit" style="font-size: 20px">Data Download <i class="fa fa-cloud-download" style="font-size: 20px"></i></button>
+<script src='https://cdn.plot.ly/plotly-latest.min.js'></script>
+
+<style type="text/css">
+    .breadcrumb {
+        padding: 5px !important;
+        margin: 0px !important;
+        background-color: transparent;
+    }
+
+    .logout {
+        color: inherit !important;
+    }
+    .logout:hover { 
+        text-decoration: none !important;
+    }
+</style>
+
+<form method="POST" class="hidden" id="form" style="position: relative; margin: 20px">
+    <div class="form-group" style="display: flex; justify-content: space-between;">
+    	<nav aria-label="breadcrumb">
+          <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/home">Home</a></li>
+            <li class="breadcrumb-item"><a href="/date">Date</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Chart</li>
+          </ol>
+        </nav>
+        <button type="submit" class="btn btn-outline-secondary" name="LogOut" value="True">
+            <a href="/logout" class="logout"><i class="fa fa-sign-out" aria-hidden="true" style="margin-right: 3px;"></i>Log out</a>
+        </button>
     </div>
+
+    <button class="btn btn-secondary" type="submit" name="submit" value="DataDownload" id="submit">
+    	Data Download <i class="fa fa-cloud-download" style="font-size: 20px"></i>
+    </button>
+
 </form>
+
+<div class="container" style="display: flex; justify-content: center; flex-wrap: wrap; flex-direction: column;">
+	<div style="display: flex; justify-content: center;">
+		<select class="hidden" id="parameterSelection">
+		    <option disabled selected>-- Choose the parameter --</option>
+		    <option value="Voltage">Voltage</option>
+		    <option value="Current">Current</option>
+		    <option value="Frequency">Frequency</option>
+		    <option value="Power Factor">Power Factor</option>
+		    <option value="Power">Power</option>
+		    <option value="Energy">Energy</option>
+		    <option value="Temperature">Temperature</option>
+		</select>
+	</div>
+
+	<div style="display: flex; justify-content: center;">
+		<div id="chart"></div>
+	</div>
+</div>
+
+<script type="text/javascript">
+	var paramValues = JSON.parse('{{paramValues | tojson}}');
+	console.log(paramValues);
+
+	$('#parameterSelection').on('change', function() {
+		if(this.value==='Voltage' || this.value==='Current' || this.value==='Frequency' || this.value==='Power Factor' || this.value==='Temperature') {
+			var data = {
+			  x: paramValues['Time'],
+			  y: paramValues[this.value],
+			  type: 'scatter'
+			};
+			Plotly.newPlot('chart', [data]);
+		}
+		else if(this.value==='Power' || this.value==='Energy') {
+			var data1 = {
+			  x: paramValues['Time'],
+			  y: paramValues['Apparent '+this.value],
+			  type: 'scatter'
+			};
+			var data2 = {
+			  x: paramValues['Time'],
+			  y: paramValues['Active '+this.value],
+			  type: 'scatter'
+			};
+			var data3 = {
+			  x: paramValues['Time'],
+			  y: paramValues['Reactive '+this.value],
+			  type: 'scatter'
+			};
+			console.log([data1, data2, data3])
+			Plotly.newPlot('chart', [data1, data2, data3]);
+		}
+	});
+</script>
 {% endblock content %}
